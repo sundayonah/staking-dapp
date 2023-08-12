@@ -1,5 +1,4 @@
 // function call
-
 loadInitialData('sevenDays');
 connectMe('metamask_wallet');
 function connectWallet() {};
@@ -10,7 +9,6 @@ function openTab(event, name){
     getSelectedTab(name);
     loadInitialData(name);
 }
-
 
 async function loadInitialData(sClass) {
     console.log(sClass);
@@ -35,13 +33,14 @@ async function loadInitialData(sClass) {
             stakeAmount: userDetail.stakeAmount,
             address: currentAddress,
          };
+         console.log(user, 'user ')
             localStorage.setItem("User", JSON.stringify(user));
         let userDetailBal = userDetail.stakeAmount / 10 ** 18;
 
         document.getElementById(
             'total-locked.user-token'
         ).innerHTML = `${userDetailBal}`;
-
+ 
         //elements --id
         document.getElementById(
             'num-of-stackers-value'
@@ -190,6 +189,348 @@ async function connectMe(_provider) {
     } catch (error) {
         notify.error(error.message);
     }
-} 
+  } 
 
- 
+    async function stackTokens() {
+        try {
+            let nTokens = document.getElementById('amount-to-stack-value-new').value;
+
+            if(!nTokens) {
+                return;
+            }
+
+            if(isNaN(nTokens) || nTokens == 0 || Number(nTokens) < 0) {
+                console.log(`Invalid token amount!`);
+                return;
+            }
+
+            nTokens = Number(nTokens);
+
+            let tokenTransfer = addDecimal(nTokens, 18);
+            console.log(tokenTransfer);
+
+            let balMainUser = await contractToken.methods.balance0f(currentAddress).call();
+
+            balMainUser = Number(balMainUser) / 10 ** 18;
+            console.log(balMainUser)
+
+                if(balMainUser < nTokens){
+                    notify.error(
+                        `insufficient tokens on ${SELECT_CONTRACT[_NETWORK_ID].network_name}.\n Please buy some token first !`
+                    );
+                    return;
+                }
+
+                let sClass = getSelectedTab(contractCall);
+
+                console.log(sClass)
+
+                let balMainAllowance = await contractToken.methods
+                .allowance(
+                    currentAddress, SELECT_CONTRACT[_NETWORK_ID].STACKING[sClass].address
+                ).call();
+            
+                if(Number(balMainAllowance) < Number(tokenTransfer)) {
+                    approveTokenSpend(tokenToTransfer, sClass);
+                } else {
+                    stackTokenMain(tokenToTransfer, sClass);
+                }
+
+        } catch (error) {
+            console.log(error)
+            notify.dismiss(notification);
+            notify.error(formatEthErrorMsg(error));
+        }
+    }
+
+ async function approveTokenSpend(_mint_fee_wei, sClass) {
+    let gasEstimation;
+
+    try {
+        gasEstimation = await contractToken.methods.approve(
+            SELECT_CONTRACT[_NETWORK_ID].STACKING[sClass].address, _mint_fee_wei
+        ).estimateGas({
+            from: currentAddress,
+        })
+    } catch (error) {
+       console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    }
+
+    contractToken.methods.approve(SELECT_CONTRACT[_NETWORK_ID].STACKING[sClass].address, _mint_fee_wei )
+    .send({
+        from: currentAddress,
+        gas: gasEstimation,
+    })
+    .on('transactionHash', (hash) => {
+        console.log('TransactionHash: ', hash);
+    })
+    .on('reciept', (reciept) => {
+        console.log(reciept)
+        stackTokenMain(_mint_fee_wei);
+    })
+    .catch((error) => {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    })
+ };
+
+
+ async function stackTokenMain(_amount_wei, sClass) {
+    let gasEstimation;
+
+    let contractToken = getContractObj(sClass);
+
+    try {
+        gasEstimation = await contractToken.methods.stake(_amount_wei).estimateGas({
+            from: currentAddress,
+        });
+    } catch (error) {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    }
+
+    contractToken.methods.stake(_amount_wei).send({
+        from: currentAddress,
+        gas: gasEstimation,
+    })
+    .on('receipt', (reciept) => {
+        console.log(reciept);
+        const receiptObj = {
+            token: _amount_wei,
+            from: reciept.from,
+            to: reciept.to,
+            blockHash: reciept.blockHash,
+            blockNumber: reciept.blockNumber,
+            cumulativeGasUsed: reciept.cumulativeGasUsed,
+            effectiveGasUsed: reciept.effectiveGasUsed,
+            gasUsed: reciept.gasUsed,
+            status: reciept.status,
+            transactionHash: reciept.transactionHash,
+            type: reciept.type
+        };
+
+        let transactionHistory = [];
+            const allUserTransaction = localStorage.getItem("transactions");
+            if (allUserTransaction) {
+            transactionHistory = JSON.parse(localStorage.getItem("transactions"));
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )
+            } else {
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )}
+
+            console.log(allUserTransaction, 'allUserTransaction');
+
+            window.location.href = 'http://127.0.0.1:5500/analytic.html';
+    })
+    .on('transactionHash', (hash) => {
+        console.log('Transaction hash: ', hash)
+    })
+    .catch((error) => {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    });
+   }
+
+
+   async function unstackTokens() {
+    try {
+        let nTokens = document.getElementById('amount-to-unstack-value').value;
+
+        if(!nTokens) {
+            return;
+        }
+
+        if(isNaN(nTokens) || nTokens == 0 || Number(nTokens) < 0) {
+            console.log(`Invalid token amount!`);
+            notify.error(`Invalid token amount!`);
+            return;
+        }
+
+        nTokens = Number(nTokens);
+
+        let tokenToTransfer = addDecimal(nTokens, 18);
+    
+            let sClass = getSelectedTab(contractCall);
+            let contractStacking  = getContractObj(sClass)
+
+            let balMainUser = await contractStacking.methods
+            .getUser(currentAddress).call();
+        
+            balMainUser = Number(balMainUser.stakeAmount) / 10 ** 18;
+            console.log(balMainUser)
+    
+                if(balMainUser < nTokens){
+                    notify.error(
+                        `insufficient staked tokens on ${SELECT_CONTRACT[_NETWORK_ID].network_name}!`
+                    );
+                    return;
+                }
+                unstackTokenMain(tokenToTransfer, contractStacking, sClass);
+            } catch (error) {
+                console.log(error)
+                notify.dismiss(notification);
+                notify.error(formatEthErrorMsg(error));
+            }
+        }
+
+
+ async function unstackTokenMain(_amount_wei, contractStacking, sClass) {  
+    let gasEstimation;
+
+    try {
+        gasEstimation = await contractStacking.methods.unstake(_amount_wei).estimateGas({
+            from: currentAddress,
+        });
+    } catch (error) {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    }
+
+    contractStacking.methods.unstake(_amount_wei).send({
+        from: currentAddress,
+        gas: gasEstimation,
+    })
+    .on('receipt', (reciept) => {
+        console.log(reciept);
+        const receiptObj = {
+            token: _amount_wei,
+            from: reciept.from,
+            to: reciept.to,
+            blockHash: reciept.blockHash,
+            blockNumber: reciept.blockNumber,
+            cumulativeGasUsed: reciept.cumulativeGasUsed,
+            effectiveGasUsed: reciept.effectiveGasUsed,
+            gasUsed: reciept.gasUsed,
+            status: reciept.status,
+            transactionHash: reciept.transactionHash,
+            type: reciept.type
+        };
+
+        let transactionHistory = [];
+            const allUserTransaction = localStorage.getItem("transactions");
+            if (allUserTransaction) {
+            transactionHistory = JSON.parse(localStorage.getItem("transactions"));
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )
+            } else {
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )} 
+             window.location.href = 'http://127.0.0.1:5500/analytic.html';
+    })
+    .on('transactionHash', (hash) => {
+        console.log('Transaction hash: ', hash)
+    })
+    .catch((error) => {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    });
+   }
+
+
+   async function claimTokens () {
+        try {
+            let sClass = getSelectedTab(contractCall) ;
+            let contractStacking = getContract0bj(sClass);
+            let rewardBal = await contractStacking.methods
+            .getUserEstimatedRewards()
+            .call({ from: currentAddress });
+            rewardBal = Number(rewardBal);
+            console.log(" rewa rdBal", rewardBal) ;
+            if (!rewardBal){
+            notify.dismiss(notification );
+            notify.error(`insufficient Reward tokens to claim`)
+            return;
+        }
+        claimTokensMain(contractStacking, sClass);
+    } catch (error){
+        console.log(error)
+        notify.dismiss(notification);
+        notify.error(formatEthErrorMsg(error))
+
+    }
+}
+
+
+async function claimTokensMain(contractStacking, sClass) {  
+    let gasEstimation;
+
+    try {
+        gasEstimation = await contractStacking.methods.claimReward().estimateGas({
+            from: currentAddress,
+        });
+        console.log(estimateGas, 'estimateGas')
+    } catch (error) {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    }
+
+    contractStacking.methods.claimReward().send({
+        from: currentAddress,
+        gas: gasEstimation,
+    })
+    .on('receipt', (reciept) => {
+        console.log(reciept);
+        const receiptObj = {
+            token: _amount_wei,
+            from: reciept.from,
+            to: reciept.to,
+            blockHash: reciept.blockHash,
+            blockNumber: reciept.blockNumber,
+            cumulativeGasUsed: reciept.cumulativeGasUsed,
+            effectiveGasUsed: reciept.effectiveGasUsed,
+            gasUsed: reciept.gasUsed,
+            status: reciept.status,
+            transactionHash: reciept.transactionHash,
+            type: reciept.type
+        };
+
+        let transactionHistory = [];
+            const allUserTransaction = localStorage.getItem("transactions");
+            if (allUserTransaction) {
+            transactionHistory = JSON.parse(localStorage.getItem("transactions"));
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )
+            } else {
+            transactionHistory.push(receiptObj);
+            localStorage.setItem(
+            "transactions",
+            JSON.stringify(transactionHistory)
+            )} 
+             window.location.href = 'http://127.0.0.1:5500/analytic.html';
+    })
+    .on('transactionHash', (hash) => {
+        console.log('Transaction hash: ', hash)
+    })
+    .catch((error) => {
+        console.log(error)
+        notify.error(formatEthErrorMsg(error))
+        return;
+    });
+   }
+
+
+   
