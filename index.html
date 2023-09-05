@@ -5,5 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Home</title>
   </head>
-  <body></body>
+  <body>
+    <div>
+      <script>
+        import React, { useState } from "react";
+
+        const Meta = () => {
+          const [account, setAccount] = useState("");
+
+          //Function Approach:
+
+          let baseSalary = 30_000;
+          let overtime = 10;
+          let rate = 10;
+
+          function getWage(baseSalary, overtime, rate) {
+            return baseSalary + overtime * rate;
+          }
+
+          // Object Approach:
+
+          let employee = {
+            baseSalary: 30_000,
+            overtime: 10,
+            rate: 20,
+            getWage: function () {
+              return this.baseSalary + this.overtime * this.rate;
+            },
+          };
+
+          async function signIn() {
+            try {
+              const accounts = await window.ethereum.request({
+                method: "eth_requestAccounts",
+              });
+              setAccount(accounts[0]);
+            } catch (error) {
+              console.error("Error signing in:", error);
+            }
+          }
+
+          return (
+            <div>
+              <button onClick={signIn}>Sign In</button>
+              <p>Current Account: {account}</p>
+            </div>
+          );
+        };
+
+        export default Meta;
+      </script>
+
+      <h1>Hello World</h1>
+      <p>Turbo Console log</p>
+    </div>
+  </body>
 </html>

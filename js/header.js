@@ -1,6 +1,8 @@
 const _NETWORK_ID = 8001;
 let SELECT_CONTRACT = {};
 
+const _API_URL ='http://'
+
 SELECT_CONTRACT[_NETWORK_ID] = {
     network_name: 'Polygon Mumbai',
     explorer_url: 'https://mumbai.polygonscan.com/',
@@ -31,7 +33,7 @@ SELECT_CONTRACT[_NETWORK_ID] = {
 let countDownGlobal;
  
 //wallet connection
-let web3;
+let web3; 
 let contractToken;
 
 let contractCall = 'sevenDays';
